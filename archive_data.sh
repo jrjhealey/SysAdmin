@@ -5,6 +5,8 @@
 # Hard drives aren't free!
 # J. Healey 01-08-18
 
+set -eo pipefail
+
 curdir=$(pwd)
 targetdir="$1"
 usage()
@@ -22,15 +24,15 @@ EOF
 }
 
 log(){
-echo -e >&1 "\033[32mINFO: $1\e[0m"
+echo -e >&1 "\e[4;39mINFO:\e[0m \e[39m$1\e[0m"
 }
 
 err(){
-echo -e >&2 "\033[31mERROR: $1\033[0m"
+echo -e >&2 "\e[4;31mERROR:\e[0m \e[31m$1\e[0m"
 }
 
 warn(){
-echo -e >&2 "\033[33mWARNING: $1\033[0m"
+echo -e >&2 "\033[4;33mWARNING:\e[0m \e[33m$1\033[0m"
 }
 
 timer (){
