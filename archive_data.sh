@@ -1,16 +1,13 @@
 #!/bin/bash
+set -eo pipefail
 
 # Loop through directories of sequencing data
 # and compress them if they haven't been already.
 # Hard drives aren't free!
-# J. Healey 01-08-18
-
-# Exit if any unhandled errors occur
-set -eo pipefail
-
-# Initial vars
-curdir=$(pwd)
-targetdir="$1"
+#  J. Healey 01-08-18
+#   - Updated 21-08-18:
+#     Switched to getopts for argument handling
+#     since the code had become more complex
 
 usage(){
 # Usage/help dialogue
@@ -23,29 +20,64 @@ cat << EOF
 This script compresses data from our MiSeq platform.
 In future it may be generalised to support all formats.
 
-usage: $0 <data directory> [--dry-run] [--keep-img]
+usage: $0 [options] data_folder
 
-The only mandatory argument is the directory of data,
-and this must be the first argument. This should be a
-directory of directories, e.g:
+OPTIONS:
+   -h | --help        Show this message
+   -d | --dry-run     Run the program without making changes to
+                      any files (see description below)
+   -k | --keep-img    If the data folders contain images from the
+                      sequencing process, they will be kept if this
+                      argument is provided, otherwise they will be
+                      removed to conserve space (they are unecessary
+                      if the basecalls/fastqs are already available)
 
-∟⎼⎼ Data  < Pass this filepath
-  ∟⎼⎼ 01012000_M01757_0123_000000000-ABCDE/
+The only mandatory argument is the directory of data, and this must be
+the last positonal argument. This should be a directory of directories,
+e.g:
 
-Optionally, the script can be dry run to avoid changing the
-files, instead, just printing out what will be changed.
++-- ../
+  +-- Data/  < Pass this filepath
+    +-- 01012000_M01757_0123_000000000-ABCDE/
+
+Optionally, the script can be dry run to avoid changing the files,
+instead, just printing out what will be changed.
 
               ${tr}[OFF by defaut]${df}
 
-Also optionally the script can purge unecessary and large
-image files (.jpg/.tif), before compressing since only
-the basecalls/fastqs are really needed, and these cause
-considerable slow down/space usage.
+Also optionally the script can purge unecessary and large image files
+(.jpg/.tif), before compressing since only the basecalls/fastqs are
+really needed, and these cause considerable slow down/space usage.
 
               ${tr}[ON by default]${df}
 
 EOF
 }
+
+# Defaults and globals
+CURDIR=$(pwd)
+discard="True"
+dryrun="False"
+
+# Tolerate long arguments
+for arg in "$@"; do
+  shift
+  case "$arg" in
+        "--help")     set -- "$@" "-h"   ;;
+        "--dry-run")  set -- "$@" "-d"   ;;
+        "--keep-img") set -- "$@" "-k"   ;;
+        *)            set -- "$@" "$arg" ;;
+  esac
+done
+# getopts assigns the arguments to variables
+while getopts "hdk" OPTION ;do
+  case $OPTION in
+        d) dryrun="True"    ;;
+        k) discard="False"  ;;
+        h) usage ; exit 0   ;;
+  esac
+done
+
 
 log(){
 # Logging function.
@@ -62,17 +94,17 @@ echo -e >&2 "\e[4;31mERROR:\e[0m \e[31m$1\e[0m"
 warn(){
 # Warning function
 # Prints to STDOUT in YELLOW/ORANGE
-echo -e >&1 "\033[4;33mWARNING:\e[0m \e[33m$1\033[0m"
+echo -e >&2 "\033[4;33mWARNING:\e[0m \e[33m$1\033[0m"
 }
 
 timer (){
 # Timer function.
 # Reports REAL time elapsed in hours/minutes/seconds as appropriate
-# Code to be timed should be wrapped by:
-#  1  START=$SECONDS
-#  2  <execute timed code>
-#  3  FINISH=$SECONDS
-#  4  echo "Elapsed: $(timer)
+# Code to be timed should be wrapped as follows:
+#  1.  START=$SECONDS
+#  2.  <execute timed code>
+#  3.  FINISH=$SECONDS
+#  4.  echo "Elapsed: $(timer)
 # Uses the SECONDS environment variable
 hrs="$((($FINISH - $START)/3600)) hrs"
 min="$(((($FINISH - $START)/60)%60)) min"
@@ -84,45 +116,41 @@ else echo -e >&1 "\033[1m$sec\033[0m"
 fi
 }
 
-if [ "$1" == "-h" ] || [ "$1" == "--help" ] ; then
+abspath() {
+# Return the absolute path of a relative path
+# Relative path = $1
+if [ -d "$1" ]; then
+  (cd "$1"; pwd)
+elif [ -f "$1" ]; then
+  if [[ $1 = /* ]]; then
+    echo "$1"
+  elif [[ $1 == */* ]]; then
+    echo "$(cd "${1%/*}"; pwd)/${1##*/}"
+  else
+    echo "$(pwd)/$1"
+  fi
+fi
+}
+
+targetdir=${@:$OPTIND:1}
+# Ensure target dir exists and is a dir
+if [[ -z "$targetdir" ]] || [[ ! -d "$targetdir" ]] ; then
  usage
- exit 0
-fi
-
-# Check a directory was provided as first arg
-# If no arg, usage.
-if [[ -z "$targetdir" ]] ; then
- usage
- err "No target directory was provided. Exiting." ; exit 1
-fi
-
-# Check if dry run requested. False if empty, true if exact match to "--dry-run"
-if [[ -z "$2" ]] ; then
- dryrun="False"
- else
- if [ "$2" != "--dry-run" ] ; then
-  usage
-  err "Did not recognise the argument to dry run, ensure spelling and argument order are correct. Exiting." ; exit 1
- fi
-  dryrun="True"
-fi
-
-# Check if image purging is DISABLED
-# If $3 is empty, purge is active
-if [[ -z "$3" ]] ; then
- discard="True"
- else
- if [ "$3" != "--keep-img" ] ; then
-  usage
-  err "Did not recognise the argument to discard, ensure spelling and argument order are correct. Exiting." ; exit 1
- fi
-  discard="False"
+ err "No target directory was provided or the directory doesn't exist. Exiting." ; exit 1
 fi
 
 ################################################################
+log "Parameters:"
+log "Dry run status: $dryrun"
+log "Purging images?: $discard"
+log "Data directory: $targetdir ($(abspath $targetdir))"
+
+if [ "$dryrun" == "True" ] ; then
+  warn "With --dry-run enabled, be aware that the elapsed timings of the program will be meaningless..."
+fi
 
 cd "$targetdir"
-log "Moved to ${targetdir}..."
+log "Moved to ${targetdir} ($(abspath $targetdir))"
 
 # First test to see if there are any untarred files (stops after 1st occurrence of a suitable directory for speed)
 if [[ -z $(find ./ -maxdepth 1 -type d -name "*[0-9][0-9][0-1][0-9][0-9][0-9]_M01757*" -print -quit) ]] ; then
@@ -183,5 +211,5 @@ do
   fi
 done
 
-cd "$curdir"
+cd "$CURDIR"
 log "Moved back to previous directory, now in $(pwd)..."
