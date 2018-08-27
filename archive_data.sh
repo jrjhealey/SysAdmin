@@ -16,7 +16,7 @@ usage(){
 # codes cannot be used.
 tr=$(tput setaf 1) # text = red
 df=$(tput sgr0)    # text = reset
-cat << EOF
+cat << EOF >&2
 This script compresses data from our MiSeq platform.
 In future it may be generalised to support all formats.
 
@@ -94,10 +94,10 @@ echo -e >&2 "\e[4;31mERROR:\e[0m \e[31m$1\e[0m"
 warn(){
 # Warning function
 # Prints to STDOUT in YELLOW/ORANGE
-echo -e >&2 "\033[4;33mWARNING:\e[0m \e[33m$1\033[0m"
+echo -e >&1 "\033[4;33mWARNING:\e[0m \e[33m$1\033[0m"
 }
 
-timer (){
+timer(){
 # Timer function.
 # Reports REAL time elapsed in hours/minutes/seconds as appropriate
 # Code to be timed should be wrapped as follows:
@@ -140,10 +140,12 @@ if [[ -z "$targetdir" ]] || [[ ! -d "$targetdir" ]] ; then
 fi
 
 ################################################################
+echo "--------------------------------------------------"
+log "Run date: $(date '+%Y-%m-%d %H:%M:%S')"
 log "Parameters:"
-log "Dry run status: $dryrun"
-log "Purging images?: $discard"
-log "Data directory: $targetdir ($(abspath $targetdir))"
+log "  Dry run status: $dryrun"
+log "  Purging images?: $discard"
+log "  Data directory: $targetdir ($(abspath $targetdir))"
 
 if [ "$dryrun" == "True" ] ; then
   warn "With --dry-run enabled, be aware that the elapsed timings of the program will be meaningless..."
@@ -154,8 +156,7 @@ log "Moved to ${targetdir} ($(abspath $targetdir))"
 
 # First test to see if there are any untarred files (stops after 1st occurrence of a suitable directory for speed)
 if [[ -z $(find ./ -maxdepth 1 -type d -name "*[0-9][0-9][0-1][0-9][0-9][0-9]_M01757*" -print -quit) ]] ; then
- usage
- err "No suitably named directories found. Maybe everything is already compressed?. Exiting." ; exit 1
+ warn "Nothing to do - no suitably named directories were found. Maybe everything is already compressed? Otherwise double check your options. Exiting." ; exit 1
 fi
 
 # Main file loop begins
@@ -191,9 +192,11 @@ do
         log "No image purging requested..."
       fi
       START="$SECONDS"
-      tar czvf "${dir%/}".tar.gz "$dir" --remove-files
+      tar czf "${dir%/}".tar.gz "$dir" --remove-files
       FINISH="$SECONDS"
       tarsize=$(bc <<<"scale=4; $(wc -c <"${dir%/}".tar.gz) /1024^3")
+      # Here's a neat command that could be used to show a progress bar if wanted in future
+      #   tar cf - "${dir}" -P | pv -s $(du -sb "${dir}" | awk '{print $1}') | gzip > "${dir%/}".tar.gz
       log "Created $tarsize GB archive in $(timer)..."
     fi
 # Else if a directory already has a counterpart archive, remove it
