@@ -152,13 +152,13 @@ if [ "$dryrun" == "True" ] ; then
 fi
 
 cd "$targetdir"
-log "Moved to ${targetdir} ($(abspath $targetdir))"
 
 # First test to see if there are any untarred files (stops after 1st occurrence of a suitable directory for speed)
 if [[ -z $(find ./ -maxdepth 1 -type d -name "*[0-9][0-9][0-1][0-9][0-9][0-9]_M01757*" -print -quit) ]] ; then
  warn "Nothing to do - no suitably named directories were found. Maybe everything is already compressed? Otherwise double check your options. Exiting." ; exit 1
 fi
 
+log "Moved to target directory. ($(abspath $targetdir))"
 # Main file loop begins
 # Match directories with the beginning format of an illumina directory
 find ./ -maxdepth 1 -type d -name "*[0-9][0-9][0-1][0-9][0-9][0-9]_M01757*" -print0 | while read -d $'\0' dir
